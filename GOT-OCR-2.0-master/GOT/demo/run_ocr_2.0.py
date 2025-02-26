@@ -1,4 +1,5 @@
 import argparse
+import json
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import os
@@ -49,11 +50,12 @@ def eval_model(args):
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
 
-    model = GOTQwenForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True, device_map='cuda', use_safetensors=True, pad_token_id=151643).eval()
+    model = GOTQwenForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True, device_map='mps', use_safetensors=True, pad_token_id=151643).eval()
 
     
 
-    model.to(device='cuda',  dtype=torch.bfloat16)
+    # model.to(device='cuda',  dtype=torch.bfloat16)
+    model.to(device='mps',  dtype=torch.float16)
 
 
     # TODO vary old codes, NEED del 
@@ -125,7 +127,7 @@ def eval_model(args):
     image_tensor_1 = image_processor_high(image_1)
 
 
-    input_ids = torch.as_tensor(inputs.input_ids).cuda()
+    input_ids = torch.as_tensor(inputs.input_ids).to('mps')
 
     stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
     keywords = [stop_str]
@@ -133,10 +135,10 @@ def eval_model(args):
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
 
-    with torch.autocast("cuda", dtype=torch.bfloat16):
+    with torch.autocast("mps", dtype=torch.float16):
         output_ids = model.generate(
             input_ids,
-            images=[(image_tensor.unsqueeze(0).half().cuda(), image_tensor_1.unsqueeze(0).half().cuda())],
+            images=[(image_tensor.unsqueeze(0).half().to('mps'), image_tensor_1.unsqueeze(0).half().to('mps'))],
             do_sample=False,
             num_beams = 1,
             no_repeat_ngram_size = 20,
@@ -228,9 +230,24 @@ def eval_model(args):
                 with open(html_path_2, 'w') as web_f_new:
                     web_f_new.write(new_web)
 
+            # 保存为txt文件
+            if args.save_txt:
+                txt_path = os.path.join("./results", "output.txt")
+                with open(txt_path, "w", encoding="utf-8") as f:
+                    f.write(outputs)
 
-
-
+            # 保存为json文件
+            if args.save_json:
+                json_path = os.path.join("./results", "output.json")
+                result_dict = {
+                    "image_file": args.image_file,
+                    "type": args.type,
+                    "text": outputs,
+                    "bbox": args.box if args.box else None,
+                    "color": args.color if args.color else None
+                }
+                with open(json_path, "w", encoding="utf-8") as f:
+                    json.dump(result_dict, f, ensure_ascii=False, indent=4)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -240,6 +257,8 @@ if __name__ == "__main__":
     parser.add_argument("--box", type=str, default= '')
     parser.add_argument("--color", type=str, default= '')
     parser.add_argument("--render", action='store_true')
+    parser.add_argument("--save-txt", action='store_true', help="Save output to txt file")
+    parser.add_argument("--save-json", action='store_true', help="Save output to json file")
     args = parser.parse_args()
 
     eval_model(args)

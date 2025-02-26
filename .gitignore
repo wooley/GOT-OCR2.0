@@ -1,3 +1,4 @@
 *.safetensors
-/.DS_Store
+GOT.egg-info
+.DS_Store
 *.py[cod]

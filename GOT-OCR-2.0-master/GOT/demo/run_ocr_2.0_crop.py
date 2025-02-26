@@ -104,11 +104,11 @@ def eval_model(args):
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
 
-    model = GOTQwenForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True, device_map='cuda', use_safetensors=True, pad_token_id=151643).eval()
+    model = GOTQwenForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True, device_map='mps', use_safetensors=True, pad_token_id=151643).eval()
 
 
 
-    model.to(device='cuda',  dtype=torch.bfloat16)
+    model.to(device='mps',  dtype=torch.float16)
 
 
     # vary old codes, no use
@@ -184,7 +184,7 @@ def eval_model(args):
 
     inputs = tokenizer([prompt])
 
-    input_ids = torch.as_tensor(inputs.input_ids).cuda()
+    input_ids = torch.as_tensor(inputs.input_ids).to('mps')
 
     stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
     keywords = [stop_str]
@@ -192,10 +192,10 @@ def eval_model(args):
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
 
-    with torch.autocast("cuda", dtype=torch.bfloat16):
+    with torch.autocast("mps", dtype=torch.float16):
         output_ids = model.generate(
             input_ids,
-            images=[(image_list.half().cuda(), image_list.half().cuda())],
+            images=[(image_list.half().to('mps'), image_list.half().to('mps'))],
             do_sample=False,
             num_beams = 1,
             # no_repeat_ngram_size = 20,
