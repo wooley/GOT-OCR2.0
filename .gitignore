@@ -1,0 +1,3 @@
+*.safetensors
+/.DS_Store
+*.py[cod]
